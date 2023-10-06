@@ -42,10 +42,11 @@ type webSocketServer struct {
 
 // websocketClient WebSocket客户端实例
 type websocketClient struct {
-	bot       *coolq.CQBot
-	mu        sync.Mutex
-	universal *wsConn
-	event     *wsConn
+	bot        *coolq.CQBot
+	mu         sync.Mutex
+	universal  *wsConn
+	event      *wsConn
+	postFormat string
 
 	token             string
 	filter            string
@@ -80,6 +81,8 @@ const wsDefault = `  # 正向WS设置
   - ws:
       # 正向WS服务器监听地址
       address: 0.0.0.0:8080
+      # 消息上报格式，默认同 message > post-format
+      post-format: ''
       middlewares:
         <<: *default # 引用默认中间件
 `
@@ -95,16 +98,19 @@ const wsReverseDefault = `  # 反向WS设置
       event: ws://your_websocket_event.server
       # 重连间隔 单位毫秒
       reconnect-interval: 3000
+      # 消息上报格式，默认同 message > post-format
+      post-format: ''
       middlewares:
         <<: *default # 引用默认中间件
 `
 
 // WebsocketServer 正向WS相关配置
 type WebsocketServer struct {
-	Disabled bool   `yaml:"disabled"`
-	Address  string `yaml:"address"`
-	Host     string `yaml:"host"`
-	Port     int    `yaml:"port"`
+	Disabled   bool   `yaml:"disabled"`
+	Address    string `yaml:"address"`
+	Host       string `yaml:"host"`
+	Port       int    `yaml:"port"`
+	PostFormat string `yaml:"post-format"`
 
 	MiddleWares `yaml:"middlewares"`
 }
@@ -116,6 +122,7 @@ type WebsocketReverse struct {
 	API               string `yaml:"api"`
 	Event             string `yaml:"event"`
 	ReconnectInterval int    `yaml:"reconnect-interval"`
+	PostFormat        string `yaml:"post-format"`
 
 	MiddleWares `yaml:"middlewares"`
 }
@@ -187,9 +194,10 @@ func runWSClient(b *coolq.CQBot, node yaml.Node) {
 	}
 
 	c := &websocketClient{
-		bot:    b,
-		token:  conf.AccessToken,
-		filter: conf.Filter,
+		bot:        b,
+		token:      conf.AccessToken,
+		filter:     conf.Filter,
+		postFormat: conf.PostFormat,
 	}
 	filter.Add(c.filter)
 
@@ -345,6 +353,12 @@ func (c *websocketClient) onBotPushEvent(typ, url string, conn **wsConn) func(e 
 		if flt != nil && !flt.Eval(gjson.Parse(e.JSONString())) {
 			log.Debugf("上报Event %s 到 WS服务器 时被过滤.", e.JSONBytes())
 			return
+		}
+		switch e.Raw.PostType {
+		case "message", "message_sent":
+			if c.postFormat == "string" { // 当且仅当配置了上报格式为 string （需要默认保持 array）
+				e.Raw.Others["message"] = e.Raw.Others["raw_message"]
+			}
 		}
 
 		log.Debugf("向反向WS %s服务器推送Event: %s", typ, e.JSONBytes())
@@ -503,6 +517,13 @@ func (s *webSocketServer) onBotPushEvent(e *coolq.Event) {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	switch e.Raw.PostType {
+	case "message", "message_sent":
+		if s.conf.PostFormat == "string" { // 当且仅当配置了上报格式为 string （需要默认保持 array）
+			e.Raw.Others["message"] = e.Raw.Others["raw_message"]
+		}
+	}
 
 	j := 0
 	for i := 0; i < len(s.eventConn); i++ {

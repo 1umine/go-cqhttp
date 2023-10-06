@@ -51,6 +51,7 @@ type HTTPServer struct {
 
 type httpServerPost struct {
 	URL             string  `yaml:"url"`
+	PostFormat      string  `yaml:"post-format"`
 	Secret          string  `yaml:"secret"`
 	MaxRetries      *uint64 `yaml:"max-retries"`
 	RetriesInterval *uint64 `yaml:"retries-interval"`
@@ -73,6 +74,7 @@ type HTTPClient struct {
 	client          *http.Client
 	MaxRetries      uint64
 	RetriesInterval uint64
+	PostFormat      string // onebot 消息上报格式
 }
 
 type httpCtx struct {
@@ -93,6 +95,7 @@ const httpDefault = `
         <<: *default # 引用默认中间件
       post:           # 反向HTTP POST地址列表
       #- url: ''                # 地址
+      #  post-format: ''  		# 消息上报格式 string / array, 为空则同 message > post-format
       #  secret: ''             # 密钥
       #  max-retries: 3         # 最大重试，0 时禁用
       #  retries-interval: 1500 # 重试时间，单位毫秒，0 时立即
@@ -312,6 +315,7 @@ client:
 				timeout:         conf.Timeout,
 				MaxRetries:      puint64Operator(c.MaxRetries, 3),
 				RetriesInterval: puint64Operator(c.RetriesInterval, 1500),
+				PostFormat:      c.PostFormat,
 			}.Run()
 		}
 	}
@@ -355,6 +359,12 @@ func (c *HTTPClient) onBotPushEvent(e *coolq.Event) {
 		if flt != nil && !flt.Eval(gjson.Parse(e.JSONString())) {
 			log.Debugf("上报Event %v 到 HTTP 服务器 %s 时被过滤.", c.addr, e.JSONBytes())
 			return
+		}
+	}
+	switch e.Raw.PostType {
+	case "message", "message_sent":
+		if c.PostFormat == "string" { // 当且仅当配置了上报格式为 string （需要默认保持 array）
+			e.Raw.Others["message"] = e.Raw.Others["raw_message"]
 		}
 	}
 

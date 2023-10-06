@@ -75,6 +75,7 @@ heartbeat:
 message:
   # 上报数据类型
   # 可选: string,array
+  # 若需要不同服务配置不同上报格式则此项需为 array
   post-format: string
   # 是否忽略无效的CQ码, 如果为假将原样发送
   ignore-invalid-cqcode: false

@@ -192,6 +192,7 @@ func (bot *CQBot) guildChannelMessageEvent(c *client.QQClient, m *message.GuildC
 		"message_id":   id,
 		"user_id":      fU64(m.Sender.TinyId),
 		"message":      ToFormattedMessage(m.Elements, source), // todo: 增加对频道消息 Reply 的支持
+		"raw_message":  toStringMessage(m.Elements, source),
 		"self_tiny_id": fU64(bot.Client.GuildService.TinyId),
 		"sender": global.MSG{
 			"user_id":  m.Sender.TinyId,
