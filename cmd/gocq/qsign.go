@@ -97,7 +97,7 @@ func getAvaliableSignServer() (*config.SignServer, error) {
 		return cs, nil
 	}
 	if len(base.QSign.SignServers) == 0 {
-		return nil, errors.New("no sign server was configured")
+		return &config.SignServer{}, errors.New("no sign server was configured")
 	}
 	maxCount := base.QSign.MaxCheckCount
 	if maxCount == 0 {
@@ -286,6 +286,9 @@ func signSubmit(uin string, cmd string, callbackID int64, buffer []byte, t strin
 // signCallback
 // 刷新 token 和签名的回调
 func signCallback(uin string, results []gjson.Result, t string) {
+	if base.QSign.RefreshInterval <= 0 {
+		return // 不管token了，空就空吧
+	}
 	for { // 等待至在线再提交
 		if cli.Online.Load() {
 			break
